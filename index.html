@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualiseur d'Arbre de Craft Interactif</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6; /* Thème blanc cassé */
+            color: #333; /* Texte principal sombre */
+            overflow: hidden; 
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+ 
+        .headbar {
+            background-color: #ffffff; /* Header blanc */
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between; /* Pour espacer les éléments */
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 1000;
+            flex-wrap: wrap; 
+        }
+ 
+        .header-left, .header-center, .header-right {
+            display: flex;
+            align-items: center;
+        }
+        .header-center {
+            flex-grow: 1;
+            justify-content: center;
+        }
+        .header-right button, .header-left button {
+            background: none;
+            border: none;
+            font-size: 1.5em; /* Taille des icônes */
+            cursor: pointer;
+            color: #555;
+            padding: 5px;
+            margin-left: 10px;
+        }
+        .header-right button:hover, .header-left button:hover {
+            color: #007bff; /* Bleu pour le survol */
+        }
+ 
+        .search-container { 
+            position: relative;
+        }
+ 
+        .headbar input[type="search"] {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            color: #333;
+            min-width: 250px; 
+        }
+ 
+        .headbar input[type="search"]::placeholder {
+            color: #999;
+        }
+ 
+        #search-suggestions {
+            position: absolute;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-top: none;
+            z-index: 999;
+            max-height: 200px;
+            overflow-y: auto;
+            border-radius: 0 0 6px 6px;
+            display: none; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+ 
+        #search-suggestions div {
+            padding: 8px 12px;
+            cursor: pointer;
+            color: #333;
+        }
+ 
+        #search-suggestions div:hover {
+            background-color: #e9ecef; 
+        }
+ 
+        #progress-bar-container {
+            width: 200px; 
+            background-color: #e9ecef;
+            border-radius: 4px;
+            margin: 0 15px; 
+            display: none; 
+        }
+ 
+        #progress-bar {
+            width: 0%;
+            height: 10px; 
+            background-color: #007bff; 
+            border-radius: 4px;
+            text-align: center;
+            line-height: 10px;
+            color: white;
+            font-size: 0.7em;
+            transition: width 0.2s ease-in-out;
+        }
+ 
+        #status-message {
+            font-size: 0.9em;
+            color: #555;
+            white-space: nowrap; 
+            margin-left: 15px;
+        }
+ 
+        #summary-info {
+            position: absolute;
+            top: 70px; 
+            right: 20px;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 8px 12px;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            font-size: 0.85em;
+            color: #333;
+            z-index: 900;
+        }
+        #summary-info div { margin-bottom: 3px; }
+        #summary-info div:last-child { margin-bottom: 0; }
+ 
+ 
+        .main-content {
+            display: flex;
+            flex-grow: 1;
+            position: relative; 
+        }
+ 
+        #background-canvas { 
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 0.1; 
+        }
+ 
+        #stats-container {
+            min-width: 280px; 
+            max-width: 280px;
+            padding: 20px;
+            background-color: #ffffff; 
+            border-right: 1px solid #dee2e6; 
+            overflow-y: auto;
+            z-index: 800; 
+            transition: margin-left 0.3s ease-in-out;
+            margin-left: 0; 
+        }
+        #stats-container.hidden {
+            margin-left: -280px; 
+        }
+ 
+ 
+        #stats-container h3 {
+            margin-top: 0;
+            color: #007bff; 
+            border-bottom: 1px solid #007bff;
+            padding-bottom: 5px;
+        }
+ 
+        .stats-level {
+            background-color: #e9ecef; 
+            padding: 8px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            cursor: default; 
+            color: #333;
+        }
+        .stats-level strong {
+            color: #0056b3; 
+        }
+ 
+ 
+        #graph-container {
+            flex-grow: 1;
+            position: relative; 
+            z-index: 1; 
+            background-color: #f8f9fa; 
+        }
+ 
+        #graph-svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+ 
+        #zoom-level-display {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.6); 
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            z-index: 10; 
+        }
+ 
+        .node {
+            cursor: pointer;
+            transition: filter 0.3s ease;
+        }
+ 
+        .node rect {
+            stroke-width: 1.5px; 
+            transition: fill 0.3s ease, stroke 0.3s ease, filter 0.3s ease;
+            filter: drop-shadow(0px 1px 2px rgba(0,0,0,0.15));
+        }
+ 
+        .node text {
+            font-size: 11px; 
+            fill: #212529; 
+            pointer-events: none; 
+            text-anchor: middle;
+        }
+        .node text.label-crafted {
+            font-weight: bold;
+        }
+ 
+        .node .emoji {
+            font-size: 14px; 
+        }
+ 
+        .node-origin rect { fill: #fff3cd; stroke: #ffeeba; } 
+        .node-origin text { fill: #856404; } 
+        .node-base rect { fill: #e2d9f3; stroke: #d6c9e0; }  
+        .node-base text { fill: #492f6d; } 
+        .node-crafted rect { fill: #ffffff; stroke: #ced4da; } 
+        .node-crafted text { fill: #343a40; }
+ 
+        .node:hover rect {
+            filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.2));
+            fill: #e6f2ff; 
+        }
+ 
+ 
+        .link {
+            stroke: #adb5bd; 
+            stroke-width: 1.5px;
+            transition: stroke-opacity 0.3s ease, stroke 0.3s ease;
+        }
+ 
+        .link.secondary-highlight { 
+             stroke: #007bff; 
+             stroke-width: 2px;
+        }
+ 
+        .modal { 
+            display: none;
+            position: fixed;
+            z-index: 1001;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4); 
+            justify-content: center;
+            align-items: center;
+        }
+ 
+        .modal-content {
+            background-color: #fff; 
+            margin: auto;
+            padding: 25px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 500px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+            color: #333; 
+        }
+ 
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.8em;
+            color: #007bff;
+        }
+ 
+        .close-button {
+            color: #aaa;
+            font-size: 30px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+ 
+        .close-button:hover,
+        .close-button:focus {
+            color: #0056b3;
+            text-decoration: none;
+        }
+        .modal-body p {
+            line-height: 1.6;
+        }
+        .modal-body ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .modal-body li {
+            background-color: #f8f9fa; 
+            padding: 8px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            border: 1px solid #e9ecef;
+        }
+ 
+        #stats-tooltip {
+            position: absolute;
+            background-color: #343a40; 
+            color: #f8f9fa;
+            border: 1px solid #495057;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            pointer-events: none; 
+            display: none;
+            z-index: 1005; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+ 
+    <div class="headbar">
+        <div class="header-left">
+            <button id="toggle-stats-button" title="Afficher/Cacher Statistiques">📊</button>
+             <input type="file" id="json-file-input" accept=".json" style="display:none;"> 
+            <button id="upload-json-button" title="Charger JSON">📤</button>
+        </div>
+        <div class="header-center">
+            <div class="search-container">
+                <input type="search" id="search-input" placeholder="Rechercher un élément...">
+                <div id="search-suggestions"></div>
+            </div>
+            <div id="progress-bar-container">
+                <div id="progress-bar">0%</div>
+            </div>
+        </div>
+        <div class="header-right">
+            <button id="toggle-links-button" title="Afficher/Cacher Tous les Liens">🔗</button> 
+            <span id="status-message">Chargez un fichier JSON.</span>
+        </div>
+    </div>
+    <div id="summary-info">
+        <div>Éléments découverts: <span id="discovered-elements-count">0</span></div>
+        <div>Recettes chargées: <span id="loaded-recipes-count">0</span></div>
+    </div>
+ 
+ 
+    <div class="main-content">
+        <canvas id="background-canvas"></canvas>
+        <div id="stats-container">
+            <h3>Statistiques par Étage</h3>
+            <div id="stats-content"></div>
+        </div>
+        <div id="graph-container">
+            <svg id="graph-svg"></svg>
+            <div id="zoom-level-display">Zoom: 1.00x</div> 
+        </div>
+    </div>
+ 
+    <div id="item-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title"></h2>
+                <span class="close-button" id="modal-close-button">&times;</span>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+        </div>
+    </div>
+    <div id="stats-tooltip"></div> 
+ 
+    <script type="module">
+        // --- Configuration Globale ---
+        const MIN_NODE_WIDTH = 100; 
+        const NODE_PADDING_X = 15; 
+        const NODE_PADDING_Y = 5;  
+        const NODE_HEIGHT = 40; 
+        const VIEWPORT_PADDING = 200; 
+        const LEVEL_SPACING_Y = NODE_HEIGHT * 2.5; 
+        const HORIZONTAL_NODE_SPACING = 30; 
+        const INITIAL_ORIGIN_SCALE = 1.0; 
+        const DEFAULT_EMOJI = '❔';
+ 
+        // --- État de l'application ---
+        let allElements = new Map(); 
+        let allRecipes = []; 
+        let allPotentialLinks = []; 
+        let baseElementNames = [];
+        let showAllLinks = false; 
+        let statsPanelVisible = true;
+        let dataWorker; 
+        let workerObjectURL = null; 
+ 
+        let simulation; 
+        let svg, gMain, gLinks, gNodes; 
+        let zoomBehavior;
+        let currentTransform = d3.zoomIdentity; 
+        let selectedNodeId = null;
+ 
+        // --- DOM Elements ---
+        const fileInput = document.getElementById('json-file-input');
+        const uploadJsonButton = document.getElementById('upload-json-button');
+        const searchInput = document.getElementById('search-input');
+        const toggleLinksButton = document.getElementById('toggle-links-button');
+        const toggleStatsButton = document.getElementById('toggle-stats-button');
+        const searchSuggestionsContainer = document.getElementById('search-suggestions');
+        const progressBarContainer = document.getElementById('progress-bar-container');
+        const progressBar = document.getElementById('progress-bar');
+        const statusMessage = document.getElementById('status-message');
+        const statsContainer = document.getElementById('stats-container');
+        const statsContent = document.getElementById('stats-content');
+        const statsTooltip = document.getElementById('stats-tooltip'); 
+        const modal = document.getElementById('item-modal');
+        const modalCloseButton = document.getElementById('modal-close-button');
+        const modalTitle = document.getElementById('modal-title');
+        const modalBody = document.getElementById('modal-body');
+        const zoomLevelDisplay = document.getElementById('zoom-level-display'); 
+        const discoveredElementsCountSpan = document.getElementById('discovered-elements-count');
+        const loadedRecipesCountSpan = document.getElementById('loaded-recipes-count');
+ 
+        // --- Code du Web Worker (sous forme de chaîne de caractères) ---
+        const workerScriptContent = `
+            const BASE_ELEMENT_DEFINITIONS_WORKER = [
+                { name: "Water", emoji: "💧" }, { name: "Fire", emoji: "🔥" },
+                { name: "Earth", emoji: "🌍" }, { name: "Wind", emoji: "🌬️" }
+            ];
+            const DEFAULT_EMOJI_WORKER = '❔';
+ 
+            self.onmessage = function(e) {
+                const fileContent = e.data;
+                let jsonData;
+                try {
+                    jsonData = JSON.parse(fileContent);
+                } catch (error) {
+                    self.postMessage({ type: 'error', message: "Erreur de parsing JSON: " + error.message });
+                    return;
+                }
+ 
+                let itemNames = [];
+                let recipesInputArray = [];
+                let formatType = 'unknown';
+ 
+                // Détection du format
+                if (jsonData && typeof jsonData === 'object' && Array.isArray(jsonData.items) && Array.isArray(jsonData.recipes) && jsonData.recipes.every(r => Array.isArray(r) && r.length === 3 && r.every(i => typeof i === 'number'))) {
+                    formatType = 'new_indexed';
+                    itemNames = jsonData.items;
+                    recipesInputArray = jsonData.recipes;
+                } else if (jsonData && typeof jsonData === 'object' && Array.isArray(jsonData.baseElements) && Array.isArray(jsonData.recipes) && jsonData.recipes.every(r => typeof r === 'object' && Array.isArray(r.inputs) && typeof r.output === 'string')) {
+                    formatType = 'old_structured';
+                    // itemNames sera construit à partir des baseElements et des outputs des recettes
+                    // recipesInputArray sera jsonData.recipes directement (après extraction des noms)
+                } else if (Array.isArray(jsonData) && jsonData.length > 0 && typeof jsonData[0] === 'object' && 'first' in jsonData[0] && 'second' in jsonData[0] && 'result' in jsonData[0]) {
+                    formatType = 'old_flat_array';
+                    // itemNames sera construit à partir de tous les noms uniques dans les recettes
+                    // recipesInputArray sera jsonData directement
+                }
+ 
+                if (formatType === 'unknown') {
+                    self.postMessage({ type: 'error', message: "Format JSON non reconnu." });
+                    return;
+                }
+ 
+                const localAllElements = new Map();
+                const localBaseElementNames = [];
+                let localAllRecipes = [];
+ 
+                // Initialiser les éléments de base communs
+                BASE_ELEMENT_DEFINITIONS_WORKER.forEach(elDef => {
+                    if (!localAllElements.has(elDef.name)) {
+                        localBaseElementNames.push(elDef.name);
+                        localAllElements.set(elDef.name, {
+                            id: elDef.name, name: elDef.name, emoji: elDef.emoji, level: 0,
+                            isBase: true, isOrigin: false, recipes: [], creates: [], discoveredBy: null
+                        });
+                    }
+                });
+                 if (!localAllElements.has("✨ Origine")) {
+                    const originElement = {
+                        id: "✨ Origine", name: "✨ Origine", emoji: "✨", level: -1, isBase: false, isOrigin: true,
+                        recipes: [], creates: localBaseElementNames.map(name => ({productName: name, recipe: [name]})), discoveredBy: null
+                    };
+                    localAllElements.set(originElement.id, originElement);
+                }
+ 
+ 
+                if (formatType === 'new_indexed') {
+                    localAllRecipes = recipesInputArray.map(indexedRecipe => {
+                        const input1Name = itemNames[indexedRecipe[0]];
+                        const input2Name = itemNames[indexedRecipe[1]];
+                        const outputName = itemNames[indexedRecipe[2]];
+                        if (!input1Name || !input2Name || !outputName) return null;
+ 
+                        const baseDefOutput = BASE_ELEMENT_DEFINITIONS_WORKER.find(b => b.name === outputName);
+                        const outputEmoji = baseDefOutput ? baseDefOutput.emoji : DEFAULT_EMOJI_WORKER;
+                        return { inputs: [input1Name, input2Name].sort(), output: outputName, outputEmoji: outputEmoji };
+                    }).filter(r => r !== null);
+                } else if (formatType === 'old_structured') {
+                    jsonData.baseElements.forEach(el => {
+                        if (!localAllElements.has(el.name)) { // S'assurer qu'il n'est pas déjà un des 4 de base
+                             if (!BASE_ELEMENT_DEFINITIONS_WORKER.some(b => b.name === el.name)) {
+                                localBaseElementNames.push(el.name); // Ajouter aux noms de base si pas déjà là
+                             }
+                             localAllElements.set(el.name, {
+                                id: el.name, name: el.name, emoji: el.emoji || DEFAULT_EMOJI_WORKER, level: 0,
+                                isBase: true, isOrigin: false, recipes: [], creates: [], discoveredBy: null
+                            });
+                        }
+                    });
+                    localAllRecipes = jsonData.recipes.map(r => ({
+                        inputs: r.inputs.sort(),
+                        output: r.output,
+                        outputEmoji: r.outputEmoji || DEFAULT_EMOJI_WORKER
+                    }));
+                } else if (formatType === 'old_flat_array') {
+                    localAllRecipes = jsonData.map(r => ({
+                        inputs: [r.first, r.second].sort(),
+                        output: r.result,
+                        outputEmoji: r.emoji || DEFAULT_EMOJI_WORKER
+                    }));
+                }
+ 
+                // --- Suite du traitement (calcul des niveaux, etc.) ---
+                let recipesToProcess = [...localAllRecipes];
+                let maxLevelReached = 0;
+                let newDiscoveriesMadeInIteration = true;
+                const maxIterations = 500; 
+                let iterationCount = 0;
+                const totalRecipes = localAllRecipes.length;
+ 
+                self.postMessage({ type: 'progress', value: 0, message: "Calcul des niveaux..." });
+ 
+                while (newDiscoveriesMadeInIteration && iterationCount < maxIterations && recipesToProcess.length > 0) {
+                    newDiscoveriesMadeInIteration = false;
+                    let remainingRecipesForNextIteration = [];
+                    for (const recipe of recipesToProcess) {
+                        const ingredientsKnownAndLeveled = recipe.inputs.every(inputName => {
+                            const el = localAllElements.get(inputName);
+                            return el && typeof el.level === 'number';
+                        });
+                        if (ingredientsKnownAndLeveled) {
+                            const inputElements = recipe.inputs.map(name => localAllElements.get(name));
+                            const maxInputLevel = Math.max(0, ...inputElements.map(el => el.level));
+                            const outputLevel = maxInputLevel + 1;
+                            let outputElement = localAllElements.get(recipe.output);
+                            if (!outputElement) {
+                                outputElement = {
+                                    id: recipe.output, name: recipe.output, emoji: recipe.outputEmoji,
+                                    level: outputLevel, isBase: false, isOrigin: false,
+                                    recipes: [], creates: [], discoveredBy: recipe.inputs.sort()
+                                };
+                                localAllElements.set(recipe.output, outputElement);
+                                newDiscoveriesMadeInIteration = true;
+                            } else {
+                                 if (typeof outputElement.level === 'undefined' || outputLevel < outputElement.level) {
+                                    outputElement.level = outputLevel;
+                                    outputElement.discoveredBy = recipe.inputs.sort(); 
+                                    newDiscoveriesMadeInIteration = true; 
+                                }
+                                 if (outputElement.emoji === DEFAULT_EMOJI_WORKER && recipe.outputEmoji !== DEFAULT_EMOJI_WORKER) {
+                                     outputElement.emoji = recipe.outputEmoji;
+                                 }
+                            }
+                            const recipeKey = recipe.inputs.sort().join('+');
+                            if (!outputElement.recipes.find(r => r.sort().join('+') === recipeKey)) {
+                               outputElement.recipes.push(recipe.inputs.sort());
+                            }
+                            recipe.inputs.forEach(inputName => {
+                                const inputEl = localAllElements.get(inputName);
+                                if (inputEl && !inputEl.creates.some(c => c.productName === recipe.output && JSON.stringify(c.recipe.sort()) === JSON.stringify(recipe.inputs.sort()))) {
+                                    inputEl.creates.push({ productName: recipe.output, recipe: recipe.inputs.sort() });
+                                }
+                            });
+                            if (maxLevelReached < outputLevel) maxLevelReached = outputLevel;
+                        } else {
+                            remainingRecipesForNextIteration.push(recipe);
+                        }
+                    }
+                    recipesToProcess = remainingRecipesForNextIteration;
+                    iterationCount++;
+                    if (iterationCount % 50 === 0) { 
+                         self.postMessage({ type: 'progress', value: (totalRecipes - recipesToProcess.length) / totalRecipes * 100, message: \`Calcul des niveaux (\${iterationCount})...\` });
+                    }
+                }
+ 
+                localAllElements.forEach(el => {
+                    if (typeof el.level === 'undefined') {
+                        const baseDef = BASE_ELEMENT_DEFINITIONS_WORKER.find(b => b.name === el.id);
+                        if (baseDef) {
+                            el.emoji = el.emoji || baseDef.emoji; 
+                            el.level = 0;
+                            el.isBase = true;
+                        } else {
+                            el.emoji = el.emoji || DEFAULT_EMOJI_WORKER;
+                            el.level = maxLevelReached + 1; 
+                        }
+                    }
+                });
+ 
+                self.postMessage({ type: 'progress', value: 95, message: "Génération des liens..." });
+ 
+                const localAllPotentialLinks = [];
+                const origin = localAllElements.get("✨ Origine");
+                if (origin && origin.creates) {
+                    origin.creates.forEach(creation => {
+                        if (localAllElements.has(creation.productName)) { 
+                            localAllPotentialLinks.push({source: origin.id, target: localAllElements.get(creation.productName).id, type: 'base_connection'});
+                        }
+                    });
+                }
+                localAllRecipes.forEach(recipe => {
+                    const outputEl = localAllElements.get(recipe.output);
+                    if (outputEl) {
+                        recipe.inputs.forEach(inputName => {
+                            const inputEl = localAllElements.get(inputName);
+                            if (inputEl) { 
+                                if (!localAllPotentialLinks.some(l => l.source === inputName && l.target === recipe.output)) {
+                                     localAllPotentialLinks.push({ source: inputEl.id, target: outputEl.id, type: 'ingredient' });
+                                }
+                            }
+                        });
+                    }
+                });
+ 
+                const elementsArray = Array.from(localAllElements.entries());
+ 
+                self.postMessage({ 
+                    type: 'done', 
+                    elements: elementsArray, 
+                    recipes: localAllRecipes, 
+                    potentialLinks: localAllPotentialLinks, 
+                    baseNames: localBaseElementNames 
+                });
+            };
+        `;
+ 
+ 
+        // --- Initialisation ---
+        function initializeGraph() {
+            svg = d3.select("#graph-svg");
+ 
+            zoomBehavior = d3.zoom()
+                .scaleExtent([0.02, 8]) 
+                .on("zoom", zoomed); 
+            svg.call(zoomBehavior);
+ 
+            if (gMain) gMain.remove();
+            gMain = svg.append("g").attr("class", "main-group");
+            gLinks = gMain.append("g").attr("class", "links-group");
+            gNodes = gMain.append("g").attr("class", "nodes-group");
+ 
+            simulation = d3.forceSimulation()
+                .on("tick", () => { 
+                    updateRenderedNodesAndLinks();
+                });
+ 
+            svg.on("click", (event) => {
+                if (event.target === svg.node()) { 
+                    deselectNode();
+                }
+            });
+ 
+            window.addEventListener('resize', () => {
+                if (allElements.size > 0) { 
+                    calculateFixedPositions(); 
+                }
+                updateRenderedNodesAndLinks(); 
+            });
+        }
+ 
+        function zoomed(event) {
+            currentTransform = event.transform;
+            if (gMain) gMain.attr("transform", currentTransform);
+            if (zoomLevelDisplay) {
+                zoomLevelDisplay.textContent = `Zoom: ${currentTransform.k.toFixed(2)}x`;
+            }
+            updateRenderedNodesAndLinks(); 
+        }
+ 
+        // --- Traitement des Données ---
+        uploadJsonButton.addEventListener('click', () => fileInput.click());
+ 
+        fileInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                statusMessage.textContent = "Chargement...";
+                progressBarContainer.style.display = 'flex';
+                progressBar.style.width = '0%';
+                progressBar.textContent = '0%';
+ 
+                if (simulation) simulation.stop();
+                if (dataWorker) {
+                    dataWorker.terminate();
+                    if(workerObjectURL) URL.revokeObjectURL(workerObjectURL); 
+                }
+                initializeGraph(); 
+ 
+                allElements.clear();
+                allRecipes = [];
+                allPotentialLinks = [];
+                baseElementNames = [];
+                selectedNodeId = null;
+                showAllLinks = false; 
+                toggleLinksButton.innerHTML = "🔗"; 
+                toggleLinksButton.title = "Afficher Tous les Liens";
+                statsContent.innerHTML = '';
+                discoveredElementsCountSpan.textContent = '0';
+                loadedRecipesCountSpan.textContent = '0';
+ 
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const fileContent = e.target.result;
+ 
+                    try {
+                        const blob = new Blob([workerScriptContent], { type: 'application/javascript' });
+                        workerObjectURL = URL.createObjectURL(blob);
+                        dataWorker = new Worker(workerObjectURL);
+                    } catch (workerError) {
+                        console.error("Erreur lors de la création du Worker:", workerError);
+                        statusMessage.textContent = "Erreur: Impossible de démarrer le traitement en arrière-plan.";
+                         progressBarContainer.style.display = 'none';
+                        if (window.location.protocol === 'file:') {
+                            statusMessage.innerHTML += "<br><small>Les Web Workers ne fonctionnent souvent pas avec le protocole file://. Essayez de servir la page via un serveur HTTP local.</small>";
+                        }
+                        return;
+                    }
+ 
+                    dataWorker.postMessage(fileContent);
+ 
+                    dataWorker.onmessage = function(eventFromWorker) {
+                        const data = eventFromWorker.data;
+                        if (data.type === 'progress') {
+                            progressBar.style.width = `${data.value}%`;
+                            progressBar.textContent = `${Math.round(data.value)}%`;
+                            if(data.message) statusMessage.textContent = data.message;
+                        } else if (data.type === 'done') {
+                            allElements = new Map(data.elements); 
+                            allRecipes = data.recipes;
+                            allPotentialLinks = data.potentialLinks.map(l => ({ 
+                                source: allElements.get(l.source),
+                                target: allElements.get(l.target),
+                                type: l.type
+                            }));
+                            baseElementNames = data.baseNames;
+ 
+                            calculateFixedPositions();
+                            simulation.nodes(Array.from(allElements.values()));
+                            simulation.alpha(0.1).restart();
+ 
+                            setTimeout(updateRenderedNodesAndLinks, 50);
+                            updateStatistics();
+                            populateSearchSuggestions();
+ 
+                            statusMessage.textContent = `Fichier traité.`;
+                            discoveredElementsCountSpan.textContent = allElements.size > 0 ? allElements.size -1 : 0;
+                            loadedRecipesCountSpan.textContent = allRecipes.length;
+                            centerViewOnOrigin();
+                            progressBarContainer.style.display = 'none';
+                            dataWorker.terminate(); 
+                            if(workerObjectURL) URL.revokeObjectURL(workerObjectURL); 
+                        } else if (data.type === 'error') {
+                            console.error("Erreur du Worker:", data.message);
+                            statusMessage.textContent = "Erreur de traitement: " + data.message;
+                            progressBarContainer.style.display = 'none';
+                            dataWorker.terminate();
+                            if(workerObjectURL) URL.revokeObjectURL(workerObjectURL);
+                        }
+                    };
+                    dataWorker.onerror = function(error) {
+                        console.error("Erreur fatale du Worker:", error);
+                        statusMessage.textContent = "Erreur fatale de traitement en arrière-plan.";
+                        progressBarContainer.style.display = 'none';
+                        dataWorker.terminate();
+                        if(workerObjectURL) URL.revokeObjectURL(workerObjectURL);
+                    };
+ 
+                };
+                reader.onerror = function() {
+                    statusMessage.textContent = "Erreur de lecture du fichier.";
+                    progressBarContainer.style.display = 'none';
+                };
+                reader.readAsText(file);
+            }
+        });
+ 
+ 
+        function calculateNodeWidth(nodeData) {
+            const tempText = svg.append("text") 
+                               .attr("class", "node-text-width-calculator") 
+                               .style("font-size", "11px") 
+                               .style("font-weight", (!nodeData.isBase && !nodeData.isOrigin) ? "bold" : "normal")
+                               .text(nodeData.name);
+            const tempEmoji = svg.append("text")
+                               .attr("class", "node-text-width-calculator")
+                               .style("font-size", "14px")
+                               .text(nodeData.emoji || "");
+ 
+            const nameWidth = tempText.node().getComputedTextLength();
+            const emojiWidth = nodeData.emoji ? tempEmoji.node().getComputedTextLength() + 5 : 0; 
+ 
+            tempText.remove();
+            tempEmoji.remove();
+ 
+            return Math.max(MIN_NODE_WIDTH, emojiWidth + nameWidth + NODE_PADDING_X * 2);
+        }
+ 
+ 
+        function calculateFixedPositions() {
+            const graphContainerWidth = svg.node()?.getBoundingClientRect().width || 800;
+            const elementsByLevel = new Map();
+            let maxLevel = -1;
+ 
+            allElements.forEach(el => {
+                if (typeof el.level !== 'number') return; 
+                el.width = calculateNodeWidth(el); 
+                if (!elementsByLevel.has(el.level)) {
+                    elementsByLevel.set(el.level, []);
+                }
+                elementsByLevel.get(el.level).push(el);
+                if (el.level > maxLevel) maxLevel = el.level;
+            });
+ 
+            const originNode = allElements.get("✨ Origine");
+            if (originNode) {
+                originNode.fx = graphContainerWidth / 2;
+                originNode.fy = NODE_HEIGHT / 2; 
+            }
+ 
+            let currentY = LEVEL_SPACING_Y + NODE_HEIGHT / 2; 
+            for (let level = 0; level <= maxLevel; level++) {
+                const nodesInLevel = elementsByLevel.get(level) || [];
+                nodesInLevel.sort((a, b) => a.name.localeCompare(b.name)); 
+ 
+                const totalWidthOfNodesInLevel = nodesInLevel.reduce((sum, node) => sum + node.width, 0);
+                const totalSpacingInLevel = (nodesInLevel.length - 1) * HORIZONTAL_NODE_SPACING;
+                const levelContentWidth = totalWidthOfNodesInLevel + totalSpacingInLevel;
+ 
+                let currentX = (graphContainerWidth / 2) - (levelContentWidth / 2);
+ 
+                nodesInLevel.forEach((node) => {
+                    node.fy = currentY;
+                    node.fx = currentX + node.width / 2;
+                    currentX += node.width + HORIZONTAL_NODE_SPACING;
+                });
+                if (nodesInLevel.length > 0) {
+                    currentY += LEVEL_SPACING_Y;
+                }
+            }
+        }
+ 
+        function centerViewOnOrigin() {
+            const originNode = allElements.get("✨ Origine");
+            if (originNode && originNode.fx != null && originNode.fy != null && svg.node()) {
+                const svgWidth = svg.node().getBoundingClientRect().width;
+                const svgHeight = svg.node().getBoundingClientRect().height;
+ 
+                const translateX = svgWidth / 2 - originNode.fx * INITIAL_ORIGIN_SCALE;
+                const translateY = (svgHeight / 2) - (originNode.fy * INITIAL_ORIGIN_SCALE) - (LEVEL_SPACING_Y * 0.5 * INITIAL_ORIGIN_SCALE); 
+ 
+                const initialTransform = d3.zoomIdentity.translate(translateX, translateY).scale(INITIAL_ORIGIN_SCALE);
+ 
+                svg.call(zoomBehavior.transform, initialTransform);
+                currentTransform = initialTransform;
+                if (zoomLevelDisplay) {
+                    zoomLevelDisplay.textContent = `Zoom: ${currentTransform.k.toFixed(2)}x`;
+                }
+ 
+                selectedNodeId = originNode.id;
+                statusMessage.textContent = `Élément sélectionné : ${originNode.emoji} ${originNode.name}`;
+                updateRenderedNodesAndLinks(); 
+                const originNodeG = d3.select(`#node-${sanitizeId(originNode.id)}`);
+                if (!originNodeG.empty()) {
+                     originNodeG.select("rect").style("filter", "drop-shadow(0px 0px 8px #007bff)"); 
+                }
+            } else {
+                centerViewOnLoad(); 
+            }
+        }
+ 
+        function centerViewOnLoad() { 
+            if (!allElements.size || !svg.node()) return;
+            const originNode = allElements.get("✨ Origine");
+             if (originNode && originNode.fx != null && originNode.fy != null) {
+                const svgWidth = svg.node().getBoundingClientRect().width;
+                const svgHeight = svg.node().getBoundingClientRect().height;
+                const scale = 0.5; 
+                const translateX = svgWidth / 2 - originNode.fx * scale;
+                const translateY = svgHeight / 3 - originNode.fy * scale; 
+                const initialTransform = d3.zoomIdentity.translate(translateX, translateY).scale(scale);
+                svg.call(zoomBehavior.transform, initialTransform);
+                currentTransform = initialTransform;
+                 if (zoomLevelDisplay) {
+                    zoomLevelDisplay.textContent = `Zoom: ${currentTransform.k.toFixed(2)}x`;
+                }
+            }
+        }
+ 
+ 
+        // --- Rendu dynamique basé sur le viewport ---
+        function updateRenderedNodesAndLinks() {
+            if (!svg || !gNodes || !gLinks || !allElements.size) return;
+ 
+            const svgWidth = svg.node().getBoundingClientRect().width;
+            const svgHeight = svg.node().getBoundingClientRect().height;
+ 
+            const topLeftData = currentTransform.invert([-VIEWPORT_PADDING, -VIEWPORT_PADDING]);
+            const bottomRightData = currentTransform.invert([svgWidth + VIEWPORT_PADDING, svgHeight + VIEWPORT_PADDING]);
+ 
+            const nodesToRender = Array.from(allElements.values()).filter(node => {
+                if (node.fx == null || node.fy == null || node.width == null) return false; 
+                return node.fx + node.width / 2 > topLeftData[0] &&
+                       node.fx - node.width / 2 < bottomRightData[0] &&
+                       node.fy + NODE_HEIGHT / 2 > topLeftData[1] &&
+                       node.fy - NODE_HEIGHT / 2 < bottomRightData[1];
+            });
+ 
+            const nodeIdsToRender = new Set(nodesToRender.map(n => n.id));
+ 
+            const linksToRender = allPotentialLinks.filter(linkData => {
+                const sourceNode = typeof linkData.source === 'string' ? allElements.get(linkData.source) : linkData.source;
+                const targetNode = typeof linkData.target === 'string' ? allElements.get(linkData.target) : linkData.target;
+                if (!sourceNode || !targetNode) return false; 
+ 
+                if (showAllLinks) {
+                    return nodeIdsToRender.has(sourceNode.id) || nodeIdsToRender.has(targetNode.id);
+                } else {
+                    return nodeIdsToRender.has(sourceNode.id) && nodeIdsToRender.has(targetNode.id);
+                }
+            });
+ 
+            const nodeSelection = gNodes.selectAll(".node")
+                .data(nodesToRender, d => d.id);
+ 
+            nodeSelection.exit().remove();
+ 
+            const nodeEnter = nodeSelection.enter().append("g")
+                .attr("class", d => `node node-${d.isOrigin ? 'origin' : (d.isBase ? 'base' : 'crafted')}`)
+                .attr("id", d => `node-${sanitizeId(d.id)}`)
+                .on("click", nodeClicked)
+                .on("dblclick", nodeDoubleClicked);
+ 
+            nodeEnter.append("rect")
+                .attr("height", NODE_HEIGHT)
+                .attr("rx", 8).attr("ry", 8); 
+ 
+            nodeEnter.append("text")
+                .attr("class", "emoji")
+                .attr("dy", "0.35em"); 
+ 
+            nodeEnter.append("text")
+                .attr("class", d => d.isBase || d.isOrigin ? "label" : "label label-crafted")
+                .attr("dy", "0.35em"); 
+ 
+            const allRenderedNodes = nodeEnter.merge(nodeSelection);
+            allRenderedNodes.attr("transform", d => `translate(${d.fx - d.width / 2}, ${d.fy - NODE_HEIGHT / 2})`);
+ 
+            allRenderedNodes.select("rect").attr("width", d => d.width);
+ 
+ 
+            allRenderedNodes.each(function(d) {
+                const nodeElement = d3.select(this);
+                const emojiText = nodeElement.select(".emoji").text(d.emoji);
+                const labelText = nodeElement.select(".label").text(d.name);
+ 
+                const emojiBBoxWidth = d.emoji ? emojiText.node().getBBox().width + 5 : 0;
+                const labelBBoxWidth = labelText.node().getBBox().width;
+ 
+                emojiText.attr("x", (d.width - labelBBoxWidth - emojiBBoxWidth + (d.emoji ? 5:0) ) / 2 + (d.emoji ? 0 : emojiBBoxWidth/2) );
+                labelText.attr("x", (d.width + emojiBBoxWidth - (d.emoji ? 5:0) ) / 2 );
+ 
+ 
+                emojiText.attr("y", NODE_HEIGHT / 2);
+                labelText.attr("y", NODE_HEIGHT / 2);
+ 
+                if (!d.isBase && !d.isOrigin) {
+                    labelText.classed("label-crafted", true);
+                } else {
+                    labelText.classed("label-crafted", false);
+                }
+            });
+ 
+            const linkSelection = gLinks.selectAll(".link")
+                .data(linksToRender, d => `${(d.source.id || d.source)}-${(d.target.id || d.target)}`); 
+ 
+            linkSelection.exit().remove();
+ 
+            linkSelection.enter().append("line")
+                .attr("class", "link")
+              .merge(linkSelection) 
+                .attr("x1", d => d.source.fx) 
+                .attr("y1", d => d.source.fy)
+                .attr("x2", d => d.target.fx)
+                .attr("y2", d => d.target.fy)
+                .attr("stroke-opacity", function(d) {
+                    if (selectedNodeId) {
+                        const selectedElement = allElements.get(selectedNodeId);
+                        if (!selectedElement) return showAllLinks ? 0.25 : 0.1;
+ 
+                        const parentsOfSelected = new Set(selectedElement.recipes.flat());
+                        const childrenOfSelected = new Set(selectedElement.creates.map(c => c.productName));
+                        const sourceId = d.source.id || d.source;
+                        const targetId = d.target.id || d.target;
+ 
+                        if (sourceId === selectedNodeId || targetId === selectedNodeId || 
+                            (parentsOfSelected.has(sourceId) && parentsOfSelected.has(targetId)) ||
+                            (childrenOfSelected.has(sourceId) && childrenOfSelected.has(targetId))) {
+                            return 0.8;
+                        }
+                    }
+                    return showAllLinks ? 0.25 : 0.1; 
+                })
+                .classed("secondary-highlight", function(d) {
+                     if (selectedNodeId) {
+                        const selectedElement = allElements.get(selectedNodeId);
+                        if (!selectedElement) return false;
+                        const parentsOfSelected = new Set(selectedElement.recipes.flat());
+                        const childrenOfSelected = new Set(selectedElement.creates.map(c => c.productName));
+                        const sourceId = d.source.id || d.source;
+                        const targetId = d.target.id || d.target;
+ 
+                        return (sourceId === selectedNodeId || targetId === selectedNodeId ||
+                               (parentsOfSelected.has(sourceId) && parentsOfSelected.has(targetId)) ||
+                               (childrenOfSelected.has(sourceId) && childrenOfSelected.has(targetId)));
+                    }
+                    return false;
+                });
+        }
+ 
+        function dragstarted(event, d) { /* No-op pour layout fixe */ }
+        function dragged(event, d) { /* No-op pour layout fixe */ }
+        function dragended(event, d) { /* No-op pour layout fixe */ }
+ 
+ 
+        function sanitizeId(id) {
+            let sanitized = String(id).replace(/[^\w\s-]/gi, ''); 
+            sanitized = sanitized.replace(/\s+/g, '-'); 
+            if (sanitized.match(/^[\d-]/)) {
+                sanitized = "id-" + sanitized;
+            }
+            return sanitized;
+        }
+ 
+ 
+        // --- Interactions ---
+        toggleLinksButton.addEventListener('click', () => {
+            showAllLinks = !showAllLinks;
+            toggleLinksButton.innerHTML = showAllLinks ? "🔗" : "⛓️"; 
+            toggleLinksButton.title = showAllLinks ? "Cacher Liens Non Pertinents" : "Afficher Tous les Liens";
+            updateRenderedNodesAndLinks(); 
+        });
+ 
+        toggleStatsButton.addEventListener('click', () => {
+            statsPanelVisible = !statsPanelVisible;
+            statsContainer.classList.toggle('hidden', !statsPanelVisible);
+            toggleStatsButton.innerHTML = statsPanelVisible ? "📊" : "📈"; 
+            toggleStatsButton.title = statsPanelVisible ? "Cacher Statistiques" : "Afficher Statistiques";
+        });
+ 
+ 
+        function nodeClicked(event, d) {
+            event.stopPropagation(); 
+ 
+            if (selectedNodeId === d.id) {
+                updateRenderedNodesAndLinks();
+                return;
+            }
+ 
+            selectedNodeId = d.id;
+            statusMessage.textContent = `Élément sélectionné : ${d.emoji} ${d.name}`;
+ 
+             svg.transition().duration(750)
+               .call(zoomBehavior.translateTo, d.fx, d.fy) 
+               .transition().duration(250) 
+               .call(zoomBehavior.scaleTo, 1.5); 
+ 
+            gNodes.selectAll(".node rect")
+                .style("filter", "drop-shadow(0px 1px 2px rgba(0,0,0,0.15))"); 
+ 
+            const clickedNodeElement = gNodes.select(`#node-${sanitizeId(d.id)}`);
+            if (!clickedNodeElement.empty()) {
+                 clickedNodeElement.select("rect").style("filter", "drop-shadow(0px 0px 6px #007bff)"); 
+            }
+            updateRenderedNodesAndLinks(); 
+        }
+ 
+ 
+        function deselectNode() {
+            selectedNodeId = null;
+            statusMessage.textContent = "Aucun élément sélectionné.";
+            gNodes.selectAll(".node rect").style("filter", "drop-shadow(0px 1px 2px rgba(0,0,0,0.15))");
+            updateRenderedNodesAndLinks(); 
+        }
+ 
+        function nodeDoubleClicked(event, d) {
+            event.stopPropagation();
+            modalTitle.textContent = `${d.emoji} ${d.name}`;
+ 
+            let modalHtml = `<p><strong>Niveau de découverte :</strong> ${d.level}</p>`;
+ 
+            if (d.recipes && d.recipes.length > 0) {
+                modalHtml += `<h4>Recettes pour créer cet élément :</h4><ul>`;
+                d.recipes.forEach(recipe => {
+                    const ingredientsText = recipe.map(ingName => {
+                        const ingEl = allElements.get(ingName);
+                        return ingEl ? `${ingEl.emoji} ${ingEl.name}` : ingName;
+                    }).join(' + ');
+                    modalHtml += `<li>${ingredientsText}</li>`;
+                });
+                modalHtml += `</ul>`;
+            } else if (d.isBase) {
+                 modalHtml += `<p>C'est un élément de base.</p>`;
+            } else if (d.isOrigin) {
+                 modalHtml += `<p>C'est le point d'origine de toutes les découvertes.</p>`;
+            }
+ 
+ 
+            if (d.creates && d.creates.length > 0) {
+                modalHtml += `<h4>Aide à créer :</h4><ul>`;
+                const uniqueCreations = [];
+                d.creates.forEach(creation => {
+                    if (!uniqueCreations.find(uc => uc.productName === creation.productName)) {
+                        uniqueCreations.push(creation);
+                    }
+                });
+                uniqueCreations.forEach(creation => {
+                    const productEl = allElements.get(creation.productName);
+                    modalHtml += `<li>${productEl ? productEl.emoji : ''} ${creation.productName}</li>`;
+                });
+                modalHtml += `</ul>`;
+            }
+ 
+            modalBody.innerHTML = modalHtml;
+            modal.style.display = 'flex';
+        }
+ 
+        modalCloseButton.onclick = () => { modal.style.display = 'none'; }
+        window.onclick = (event) => { 
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+ 
+        // --- Recherche ---
+        function positionSearchSuggestions() {
+            const searchInputRect = searchInput.getBoundingClientRect();
+            const headbarRect = searchInput.closest('.headbar').getBoundingClientRect();
+ 
+            searchSuggestionsContainer.style.left = `${searchInputRect.left - headbarRect.left}px`;
+            searchSuggestionsContainer.style.top = `${searchInputRect.bottom - headbarRect.top}px`;
+            searchSuggestionsContainer.style.width = `${searchInputRect.width}px`;
+        }
+ 
+ 
+        function populateSearchSuggestions() {
+            const searchTerm = searchInput.value.toLowerCase();
+            searchSuggestionsContainer.innerHTML = '';
+            positionSearchSuggestions(); 
+ 
+ 
+            if (searchTerm.length < 1) { 
+                searchSuggestionsContainer.style.display = 'none';
+                return;
+            }
+ 
+            const suggestions = Array.from(allElements.values())
+                .filter(el => el.name.toLowerCase().includes(searchTerm) && !el.isOrigin) 
+                .sort((a,b) => a.name.localeCompare(b.name)) 
+                .slice(0, 10); 
+ 
+            if (suggestions.length > 0) {
+                suggestions.forEach(el => {
+                    const div = document.createElement('div');
+                    div.textContent = `${el.emoji} ${el.name}`;
+                    div.onclick = () => {
+                        searchInput.value = el.name;
+                        searchSuggestionsContainer.style.display = 'none';
+                        handleSearch();
+                    };
+                    searchSuggestionsContainer.appendChild(div);
+                });
+                searchSuggestionsContainer.style.display = 'block';
+            } else {
+                searchSuggestionsContainer.style.display = 'none';
+            }
+        }
+        searchInput.addEventListener('input', populateSearchSuggestions);
+        searchInput.addEventListener('focus', populateSearchSuggestions); 
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault(); 
+                handleSearch();
+            }
+        });
+ 
+        document.addEventListener('click', function(event) {
+            if (searchInput && searchSuggestionsContainer) { 
+                if (!searchInput.contains(event.target) && !searchSuggestionsContainer.contains(event.target)) {
+                    searchSuggestionsContainer.style.display = 'none';
+                }
+            }
+        });
+ 
+ 
+        function handleSearch() {
+            const searchTerm = searchInput.value.trim().toLowerCase(); 
+            searchSuggestionsContainer.style.display = 'none';
+            if (!searchTerm) return;
+ 
+            const foundElement = Array.from(allElements.values()).find(el => el.name.toLowerCase() === searchTerm);
+ 
+            if (foundElement && !foundElement.isOrigin) { 
+                svg.transition().duration(750)
+                   .call(zoomBehavior.translateTo, foundElement.fx, foundElement.fy) 
+                   .transition().duration(250)
+                   .call(zoomBehavior.scaleTo, 1.5)
+                   .on("end", () => { 
+                        updateRenderedNodesAndLinks(); 
+                        const nodeG = d3.select(`#node-${sanitizeId(foundElement.id)}`);
+                        if (!nodeG.empty() && nodeG.datum()) {
+                            nodeClicked.call(nodeG.node(), new MouseEvent('click'), nodeG.datum());
+                            statusMessage.textContent = `Élément trouvé et sélectionné : ${foundElement.emoji} ${foundElement.name}`;
+                        } else {
+                             selectedNodeId = foundElement.id; 
+                             statusMessage.textContent = `Élément trouvé : ${foundElement.emoji} ${foundElement.name}.`;
+                             updateRenderedNodesAndLinks();
+                        }
+                   });
+            } else {
+                statusMessage.textContent = `Élément "${searchInput.value}" non trouvé.`;
+            }
+        }
+ 
+        // --- Statistiques ---
+        function updateStatistics() {
+            statsContent.innerHTML = '';
+            const elementsByLevel = {};
+            let maxDiscoveredLevel = -1;
+ 
+            allElements.forEach(el => {
+                if (el.isOrigin || typeof el.level !== 'number') return;
+                if (!elementsByLevel[el.level]) {
+                    elementsByLevel[el.level] = [];
+                }
+                elementsByLevel[el.level].push(el);
+                if (el.level > maxDiscoveredLevel) maxDiscoveredLevel = el.level;
+            });
+ 
+            let cumulativeUniqueElementsSet = new Set();
+            baseElementNames.forEach(name => cumulativeUniqueElementsSet.add(name));
+ 
+ 
+            for (let i = 0; i <= maxDiscoveredLevel; i++) {
+                const levelDiv = document.createElement('div');
+                levelDiv.classList.add('stats-level');
+ 
+                const actualDiscoveriesOnLevel = elementsByLevel[i] ? elementsByLevel[i].length : 0;
+ 
+                let potentialDiscoveriesForLevelText;
+                if (i === 0) { 
+                    potentialDiscoveriesForLevelText = baseElementNames.length;
+                } else { 
+                    const numPrevUniqueForText = cumulativeUniqueElementsSet.size;
+                    potentialDiscoveriesForLevelText = numPrevUniqueForText * (numPrevUniqueForText + 1) / 2;
+                }
+                levelDiv.innerHTML = `<strong>Étage ${i}:</strong> ${actualDiscoveriesOnLevel} / ${Math.round(potentialDiscoveriesForLevelText)} découvertes`;
+ 
+                const elementsUpToLMinus1 = new Set(cumulativeUniqueElementsSet); 
+                const countUniqueElementsUpToLMinus1 = elementsUpToLMinus1.size;
+                const totalPossibleInputCombinations = countUniqueElementsUpToLMinus1 * (countUniqueElementsUpToLMinus1 + 1) / 2;
+ 
+                const uniqueTestedInputPairsForLevel = new Set();
+                if (i > -1) { 
+                    allRecipes.forEach(recipe => {
+                        const outputElement = allElements.get(recipe.output);
+                        if (outputElement && outputElement.level === i) { 
+                            const inputsAreFromPreviousLevels = recipe.inputs.every(inputName => elementsUpToLMinus1.has(inputName));
+                            if (inputsAreFromPreviousLevels) {
+                                uniqueTestedInputPairsForLevel.add(recipe.inputs.sort().join('+'));
+                            }
+                        }
+                    });
+                }
+                const actualTestedInputCombinations = uniqueTestedInputPairsForLevel.size;
+ 
+                levelDiv.dataset.tested = actualTestedInputCombinations;
+                levelDiv.dataset.possible = totalPossibleInputCombinations;
+                levelDiv.dataset.levelNum = i;
+ 
+                if (elementsByLevel[i]) {
+                    elementsByLevel[i].forEach(el => cumulativeUniqueElementsSet.add(el.name));
+                }
+ 
+                statsContent.appendChild(levelDiv);
+ 
+                levelDiv.addEventListener('mouseenter', handleStatsMouseEnter);
+                levelDiv.addEventListener('mousemove', handleStatsMouseMove);
+                levelDiv.addEventListener('mouseleave', handleStatsMouseLeave);
+            }
+        }
+ 
+        function handleStatsMouseEnter(event) {
+            const targetDiv = event.currentTarget;
+            const tested = parseInt(targetDiv.dataset.tested, 10);
+            const possible = parseInt(targetDiv.dataset.possible, 10);
+            const levelNum = targetDiv.dataset.levelNum;
+ 
+            if (isNaN(tested) || isNaN(possible)) return;
+ 
+            const percentage = possible > 0 ? ((tested / possible) * 100).toFixed(1) : "N/A";
+ 
+            statsTooltip.innerHTML = `
+                <strong>Étage ${levelNum} - Combinaisons :</strong><br>
+                Testées : ${tested}<br>
+                Possibles (basées sur étages précédents) : ${possible}<br>
+                Exploration : ${percentage}%
+            `;
+            statsTooltip.style.display = 'block';
+        }
+ 
+        function handleStatsMouseMove(event) {
+            statsTooltip.style.left = `${event.pageX + 15}px`;
+            statsTooltip.style.top = `${event.pageY + 15}px`;
+        }
+ 
+        function handleStatsMouseLeave() {
+            statsTooltip.style.display = 'none';
+        }
+ 
+ 
+        // --- Animation de Fond ---
+        const bgCanvas = document.getElementById('background-canvas');
+        const bgCtx = bgCanvas.getContext('2d');
+        let bgLines = [];
+        let animationFrameId;
+ 
+ 
+        function resizeBgCanvas() {
+            if (!bgCanvas) return;
+            bgCanvas.width = bgCanvas.offsetWidth;
+            bgCanvas.height = bgCanvas.offsetHeight;
+            if(bgLines.length > 0 || bgCanvas.width > 0 && bgCanvas.height > 0) initBgLines(); 
+        }
+ 
+        function initBgLines() {
+            if (!bgCanvas || !bgCtx) return;
+            bgLines = [];
+            const numLines = Math.min(30, Math.floor(bgCanvas.width * bgCanvas.height / 30000)); 
+            for (let i = 0; i < numLines; i++) { 
+                bgLines.push({
+                    x: Math.random() * bgCanvas.width,
+                    y: Math.random() * bgCanvas.height,
+                    length: Math.random() * 60 + 30, 
+                    speed: Math.random() * 0.15 + 0.03, 
+                    angle: Math.random() * Math.PI * 2,
+                    opacity: Math.random() * 0.03 + 0.01 
+                });
+            }
+        }
+ 
+        function drawBgAnimation() {
+            if (!bgCtx || !bgCanvas || bgCanvas.width === 0 || bgCanvas.height === 0) {
+                animationFrameId = requestAnimationFrame(drawBgAnimation); 
+                return;
+            }
+            bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+            bgLines.forEach(line => {
+                bgCtx.beginPath();
+                bgCtx.moveTo(line.x, line.y);
+ 
+                line.x += Math.cos(line.angle) * line.speed;
+                line.y += Math.sin(line.angle) * line.speed;
+ 
+                if (line.x < -line.length) line.x = bgCanvas.width + line.length;
+                if (line.x > bgCanvas.width + line.length) line.x = -line.length;
+                if (line.y < -line.length) line.y = bgCanvas.height + line.length;
+                if (line.y > bgCanvas.height + line.length) line.y = -line.length;
+ 
+                const endX = line.x - Math.cos(line.angle) * line.length;
+                const endY = line.y - Math.sin(line.angle) * line.length;
+ 
+                bgCtx.lineTo(endX, endY);
+                bgCtx.strokeStyle = `rgba(0, 123, 255, ${line.opacity})`; 
+                bgCtx.lineWidth = 0.5;
+                bgCtx.stroke();
+            });
+            animationFrameId = requestAnimationFrame(drawBgAnimation);
+        }
+ 
+        window.onload = () => {
+            initializeGraph(); 
+            resizeBgCanvas();  
+            initBgLines();     
+ 
+            if (animationFrameId) cancelAnimationFrame(animationFrameId); 
+            drawBgAnimation(); 
+ 
+            window.addEventListener('resize', () => {
+                resizeBgCanvas();
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                drawBgAnimation(); 
+            });
+        };
+ 
+    </script>
+</body>
+</html>
